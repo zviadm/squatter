@@ -1,5 +1,7 @@
+import json
+import os
+
 import cv2
-import numpy
 from pymediainfo import MediaInfo
 from kivy.app import App
 from kivy.clock import Clock
@@ -13,12 +15,14 @@ from kivy.uix.slider import Slider
 from kivy.uix.relativelayout import RelativeLayout
 
 
+_FILENAME = "squat1.mov"
+
 class SquatterWidget(Widget):
     pass
 
 class FrameCapture(object):
 
-    def __init__(self, filename, frame_canvas):
+    def __init__(self, filename, frame_canvas, track_first_frame=None, track_windows=None):
         media_info = MediaInfo.parse(filename)
         self._rotate = 0
         for track in media_info.tracks:
@@ -30,8 +34,9 @@ class FrameCapture(object):
                 self._rotate += 1
             break
         self._cap = cv2.VideoCapture(filename)
-        self._track_first_frame = None
         self._frame_canvas = frame_canvas
+        self._track_first_frame = track_first_frame
+        self._track_windows = track_windows
 
     def release(self):
         self._cap.release()
@@ -81,14 +86,15 @@ class FrameCapture(object):
             return None
         track_window = self._track_windows[frame_n-self._track_first_frame]
         canvas_track_window = (
-            self._frame_pos[0] + int(track_window[0] * self._frame_size[0] / self._frame_orig_size[0]),
-            self._frame_pos[1] + int(track_window[1] * self._frame_size[1] / self._frame_orig_size[1]),
+            int(track_window[0] * self._frame_size[0] / self._frame_orig_size[0]),
+            int(track_window[1] * self._frame_size[1] / self._frame_orig_size[1]),
             int(track_window[2] * self._frame_size[0] / self._frame_orig_size[0]),
             int(track_window[3] * self._frame_size[1] / self._frame_orig_size[1]))
 
         canvas_track_window = (
-            canvas_track_window[0],
-            self._frame_size[1] - canvas_track_window[1] - canvas_track_window[3], # Need to flip Y axis...
+            self._frame_pos[0] + canvas_track_window[0],
+            self._frame_pos[1] + self._frame_size[1] -
+                canvas_track_window[1] - canvas_track_window[3], # Need to flip Y axis...
             canvas_track_window[2],
             canvas_track_window[3])
         return canvas_track_window
@@ -114,27 +120,23 @@ class FrameCapture(object):
 
         frame = self._read_frame()
         assert frame is not None, "Frame number out of Bounds!"
-        # set up the ROI for tracking
-        roi = frame[y:y+h, x:x+w]
-        hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-        mask = cv2.inRange(hsv_roi, numpy.array((0.,60.,32.)), numpy.array((180.,255.,255.)))
-        roi_hist = cv2.calcHist([hsv_roi],[0],mask,[180],[0,180])
-        cv2.normalize(roi_hist,roi_hist,0,255,cv2.NORM_MINMAX)
 
         self._track_first_frame = frame_n
         self._track_windows = [(x,y,w,h)]
-        self._track_roi_hist = roi_hist
-        self._track_term_crit = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1)
+        self._tracker = cv2.Tracker_create("MEDIANFLOW")
+        ok = self._tracker.init(frame, self._track_windows[-1])
+        assert ok, "Failed to initialize tracker!"
+
 
     def track_next(self):
         """Should be called until returns False"""
+        print ("FRAME N", self._cap.get(cv2.CAP_PROP_POS_FRAMES), self._track_windows[-1])
         frame = self._read_frame()
         if frame is None: return None
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        dst = cv2.calcBackProject([hsv],[0],self._track_roi_hist,[0,180],1)
-        ret, track_window = cv2.meanShift(dst, self._track_windows[-1], self._track_term_crit)
+        ok, track_window = self._tracker.update(frame)
+        assert ok, "Tracker failed to update!"
         self._track_windows.append(track_window)
-        print ("Track window", track_window, "Ret", ret)
+        print ("Track window", track_window)
         return frame
 
 
@@ -147,20 +149,27 @@ class FrameCanvas(RelativeLayout):
         self._app = app
         self.bind(width=app.seek_video)
         self.bind(height=app.seek_video)
+        #self.bind(mouse_pos=self._on_hover)
+        self.touch_points = []
 
     def on_touch_down(self, touch):
         if not self._app._cap: return False
-        canvas_xy  = (touch.pos[0]-self.pos[0], touch.pos[1]-self.pos[1])
+        canvas_xy = (touch.pos[0]-self.pos[0], touch.pos[1]-self.pos[1])
+        print ("Canvas XY", canvas_xy)
         frame_xy = self._app._cap.canvas_xy_to_frame_xy(*canvas_xy)
         frame_n = self._app._frame_slider.value
         print ("Point on Frame", frame_xy, frame_n)
+        self.touch_points = self.touch_points[-1:] + [frame_xy]
         return False
+
+    def on_hover(self, pos):
+        if not self._app._cap: return False
+        pass
 
 
 class SquatterApp(App):
 
     def build(self):
-
         frame_canvas = FrameCanvas(self)
         frame_slider = Slider(min=0, max=0, value=0, size_hint_y=None, height=100)
         frame_slider.bind(value=self.seek_video)
@@ -179,6 +188,7 @@ class SquatterApp(App):
 
         self._frame_canvas = frame_canvas
         self._frame_slider = frame_slider
+        self._btn_layout = btn_layout
         self._cap = None
 
         _keyboard = None
@@ -212,23 +222,50 @@ class SquatterApp(App):
     def _load_video(self, instance):
         if self._cap:
             self._cap.release()
-        self._cap = FrameCapture("testvid3.mov", self._frame_canvas)
+        track_first_frame = None
+        track_windows = None
+        if os.path.exists(_FILENAME+".squatter"):
+            with open(_FILENAME+".squatter", "r") as f:
+                tracking_data = json.loads(f.read())
+                track_first_frame = tracking_data["first_frame"]
+                track_windows = tracking_data["track_windows"]
+        self._cap = FrameCapture(
+                _FILENAME, self._frame_canvas,
+                track_first_frame=track_first_frame, track_windows=track_windows)
 
-        self._frame_slider.max = self._cap.n_frames()
+        self._frame_slider.max = self._cap.n_frames()-1
         self._frame_slider.value = 0
         self.seek_video(self._frame_slider, self._frame_slider.value)
 
     def _process_video(self, instance):
         if not self._cap: return
 
-        self._cap.track_start(259, 410, 409-259, 560-410, 0)
-        self._frame_slider.value = 0
+        # For testvid3:
+        # self._cap.track_start(259, 410, 409-259, 560-410, 0)
+        # For squatvid: self._cap.track_start(505, 4, 544-505, 38-4, 596)
+        # For testvid2: self._cap.track_start(278, 245, 474-278, 445-245, 0)
+        points = self._frame_canvas.touch_points
+        if len(points) < 2: return
+        self._cap.track_start(
+                points[0][0], points[0][1],
+                points[1][0]-points[0][0], points[1][1]-points[0][1],
+                int(self._frame_slider.value))
         self._frame_slider.disabled = True
+        self._btn_layout.disabled = True
+        self.seek_video(self._frame_slider, self._frame_slider.value)
         interval_secs = 0.5/self._cap.fps() # 2x original speed.
         def _track_it(dt):
             f = self._cap.track_next()
             if f is None:
                 self._frame_slider.disabled = False
+                self._btn_layout.disabled = False
+
+                # TODO(zviad): Store tracking points as JSON.
+                d = {
+                    "first_frame": self._cap._track_first_frame,
+                    "track_windows": self._cap._track_windows}
+                with open(_FILENAME+".squatter", "w") as f:
+                    f.write(json.dumps(d))
                 return
             self._frame_slider.value += 1
             Clock.schedule_once(_track_it, interval_secs)
@@ -254,7 +291,6 @@ class SquatterApp(App):
             self._frame_canvas.canvas.add(
                     Rectangle(pos=track_window[:2], size=track_window[2:]))
         self._frame_canvas.canvas.ask_update()
-
-
 if __name__ == '__main__':
     SquatterApp().run()
+

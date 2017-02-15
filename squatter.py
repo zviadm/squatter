@@ -172,6 +172,7 @@ class FrameCanvas(RelativeLayout):
     def on_touch_down(self, touch):
         if not self.collide_point(*touch.pos): return False
         if self._app._cap is None: return False
+        if self._app._play_pause_btn.text != "Play": return False
 
         canvas_xy = (touch.pos[0]-self.pos[0], touch.pos[1]-self.pos[1])
         if ((self._select_center_xy is None) or
@@ -285,6 +286,9 @@ class SquatterApp(App):
 
     def build(self):
         play_pause_btn = Button(text='Play', size_hint_x=None, width=200)
+        play_pause_btn.bind(on_press=self._on_play_pause)
+        self._play_pause_btn = play_pause_btn
+
         frame_canvas = FrameCanvas(self)
         frame_slider = Slider(min=0, max=0, value=0)
         frame_slider.bind(value=self.seek_video)
@@ -304,7 +308,7 @@ class SquatterApp(App):
         video_layout.add_widget(slider_layout)
         video_layout.add_widget(btn_layout)
 
-        rep_layout_inner = GridLayout(cols=1, size_hint_y=None)
+        rep_layout_inner = GridLayout(cols=3, size_hint_y=None)
         rep_layout_inner.bind(minimum_height=rep_layout_inner.setter('height'))
         rep_layout = ScrollView(size_hint_x=None, width=400)
         rep_layout.add_widget(rep_layout_inner)
@@ -330,6 +334,24 @@ class SquatterApp(App):
             pass
         _keyboard.bind(on_key_down=self._on_keyboard_down)
         return main_layout
+
+    def _on_play_pause(self, instance):
+        if self._play_pause_btn.text == "Play":
+            if self._cap is None: return
+            self.change_play_pause("Pause")
+            def _play(*args, **kwargs):
+                if (self._play_pause_btn.text == "Pause" and
+                        self._frame_slider.value < self._frame_slider.max):
+                    self._frame_slider.value += 1
+                    Clock.schedule_once(_play, 0.5/self._cap.fps())
+            Clock.schedule_once(_play, 0.5/self._cap.fps())
+        elif self._play_pause_btn.text == "Pause":
+            self.change_play_pause("Play")
+        elif self._play_pause_btn.text == "Stop":
+            self.change_play_pause("Play")
+
+    def change_play_pause(self, new_text):
+        self._play_pause_btn.text = new_text
 
 
     def _on_keyboard_down(self, keyboard, keycode, text, modifiers):
@@ -372,8 +394,8 @@ class SquatterApp(App):
             track_first_frame=track_first_frame, track_windows=track_windows)
         self._process_tracking_info()
 
-        self._frame_slider.max = self._cap.n_frames()-1
         self.change_frame_to(track_first_frame or 0)
+        self._frame_slider.max = self._cap.n_frames()-1
         self.seek_video(None, None)
         self._dismiss_popup()
 
@@ -385,13 +407,15 @@ class SquatterApp(App):
         print ("TrackingInfo:", track_first_frame, "Reps:", len(squat_reps))
 
         for rep_idx, squat_rep in enumerate(squat_reps):
-            self._rep_layout.add_widget(
+            l = GridLayout(cols=1, size_hint_y=None, height=450)
+            l.add_widget(
                     Label(text="Rep {}".format(rep_idx+1), size_hint_y=None, height=50))
-            self._rep_layout.add_widget(
+            l.add_widget(
                     SquatRepCanvas(
                         self, track_windows[squat_rep[0]:squat_rep[2]],
                         squat_rep[1]-squat_rep[0], squat_rep[0] + track_first_frame,
                         size_hint_y=None, height=400))
+            self._rep_layout.add_widget(l)
 
     def _process_video(self, instance):
         points = self._frame_canvas.get_selection()
@@ -399,17 +423,20 @@ class SquatterApp(App):
 
         self._frame_slider.disabled = True
         self._btn_layout.disabled = True
+        self.change_play_pause("Stop")
         self._cap.track_start(
                 points[0][0], points[0][1],
                 points[1][0]-points[0][0], points[1][1]-points[0][1],
                 int(self._frame_slider.value))
-        interval_secs = 0.5/self._cap.fps() # 2x original speed.
+        interval_secs = 0.1/self._cap.fps() # Try as fast as possible.
         def _track_it(dt):
             f = self._cap.track_next()
-            if f is None:
+            if f is None or self._play_pause_btn.text != "Stop":
                 self._frame_slider.disabled = False
                 self._btn_layout.disabled = False
+                self._process_btn.disabled = True
                 self._process_tracking_info()
+                self.change_play_pause("Play")
 
                 # TODO(zviad): Store tracking points as JSON.
                 d = {

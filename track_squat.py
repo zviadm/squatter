@@ -7,8 +7,8 @@ def _sq_distance(cm1, cm2):
 
 def extract_squat_reps(track_windows):
     reps = []
-    min_squat_distance = 2*track_windows[0][3]
-    min_back_range = 1/2 * track_windows[0][3]
+    min_squat_distance = 2.0*track_windows[0][3]
+    min_back_range = 0.5*track_windows[0][3]
 
     idx = 0
     while idx < len(track_windows):

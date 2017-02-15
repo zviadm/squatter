@@ -187,10 +187,10 @@ class FrameCanvas(RelativeLayout):
         self._select_radius += 1
         frame_xy1 = self._app._cap.canvas_xy_to_frame_xy(
                 self._select_center_xy[0] - self._select_radius,
-                self._select_center_xy[1] - self._select_radius)
+                self._select_center_xy[1] + self._select_radius)
         frame_xy2 = self._app._cap.canvas_xy_to_frame_xy(
                 self._select_center_xy[0] + self._select_radius,
-                self._select_center_xy[1] + self._select_radius)
+                self._select_center_xy[1] - self._select_radius)
         if frame_xy1 is None or frame_xy2 is None:
             self._select_radius -= 1
             return
@@ -220,10 +220,10 @@ class FrameCanvas(RelativeLayout):
             return None
         frame_xy1 = self._app._cap.canvas_xy_to_frame_xy(
                 self._select_center_xy[0] - self._select_radius,
-                self._select_center_xy[1] - self._select_radius)
+                self._select_center_xy[1] + self._select_radius)
         frame_xy2 = self._app._cap.canvas_xy_to_frame_xy(
                 self._select_center_xy[0] + self._select_radius,
-                self._select_center_xy[1] + self._select_radius)
+                self._select_center_xy[1] - self._select_radius)
         return (frame_xy1, frame_xy2)
 
 class SquatRepCanvas(RelativeLayout):
@@ -367,10 +367,11 @@ class SquatterApp(App):
 
     def _process_tracking_info(self):
         self._rep_layout.clear_widgets()
-
         track_first_frame, track_windows = self._cap._track_first_frame, self._cap._track_windows
         if track_first_frame is None: return
         squat_reps = extract_squat_reps(track_windows)
+        print ("TrackingInfo:", track_first_frame, "Reps:", len(squat_reps))
+
         for rep_idx, squat_rep in enumerate(squat_reps):
             self._rep_layout.add_widget(
                     Label(text="Rep {}".format(rep_idx+1), size_hint_y=None, height=50))

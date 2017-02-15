@@ -91,7 +91,9 @@ class FrameCapture(object):
         return (pos_x, pos_y), frame
 
     def track_window_for_canvas(self, frame_n):
-        if self._track_first_frame is None or frame_n < self._track_first_frame:
+        if (self._track_first_frame is None or
+                frame_n < self._track_first_frame or
+                frame_n >= self._track_first_frame+len(self._track_windows)):
             return None
         track_window = self._track_windows[frame_n-self._track_first_frame]
         canvas_track_window = (
@@ -142,7 +144,9 @@ class FrameCapture(object):
         frame = self._read_frame()
         if frame is None: return None
         ok, track_window = self._tracker.update(frame)
-        assert ok, "Tracker failed to update!"
+        if not ok:
+            print("Tracker no longer available!", track_window)
+            return None
         self._track_windows.append(track_window)
         print ("Track window", track_window)
         return frame
@@ -206,6 +210,8 @@ class FrameCanvas(RelativeLayout):
         if self._select_event is not None:
             self._select_event.cancel()
             self._select_event = None
+        if self._select_center_xy is not None:
+            self._app._process_btn.disabled = False
 
     def clear_selection(self):
         self.on_touch_up(None)
@@ -214,6 +220,7 @@ class FrameCanvas(RelativeLayout):
             self._select_circle = None
         self._select_center_xy = None
         self._select_radius = None
+        self._app._process_btn.disabled = True
 
     def get_selection(self):
         if self._select_center_xy is None:
@@ -277,20 +284,24 @@ class SquatRepCanvas(RelativeLayout):
 class SquatterApp(App):
 
     def build(self):
+        play_pause_btn = Button(text='Play', size_hint_x=None, width=200)
         frame_canvas = FrameCanvas(self)
-        frame_slider = Slider(min=0, max=0, value=0, size_hint_y=None, height=100)
+        frame_slider = Slider(min=0, max=0, value=0)
         frame_slider.bind(value=self.seek_video)
         load_btn = Button(text='Load')
         load_btn.bind(on_press=self._load_video)
-        process_btn = Button(text='Process')
+        process_btn = Button(text='Process', disabled=True)
         process_btn.bind(on_press=self._process_video)
 
         btn_layout = GridLayout(cols=2, size_hint_y=None, height=100)
         btn_layout.add_widget(load_btn)
         btn_layout.add_widget(process_btn)
+        slider_layout = GridLayout(cols=2, size_hint_y=None, height=100)
+        slider_layout.add_widget(play_pause_btn)
+        slider_layout.add_widget(frame_slider)
         video_layout = GridLayout(cols=1)
         video_layout.add_widget(frame_canvas)
-        video_layout.add_widget(frame_slider)
+        video_layout.add_widget(slider_layout)
         video_layout.add_widget(btn_layout)
 
         rep_layout_inner = GridLayout(cols=1, size_hint_y=None)
@@ -305,6 +316,7 @@ class SquatterApp(App):
         self._frame_canvas = frame_canvas
         self._frame_slider = frame_slider
         self._btn_layout = btn_layout
+        self._process_btn = process_btn
         self._cap = None
         self._rep_layout = rep_layout_inner
 
@@ -383,7 +395,7 @@ class SquatterApp(App):
 
     def _process_video(self, instance):
         points = self._frame_canvas.get_selection()
-        if points is None: return
+        assert points is not None
 
         self._frame_slider.disabled = True
         self._btn_layout.disabled = True

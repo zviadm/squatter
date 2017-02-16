@@ -294,9 +294,13 @@ class RepStats(Label):
 
     def __init__(self, rep_idx, exercise, fps, track_windows, bottom_idx, **kwargs):
         if exercise == "squat":
-            rep_secs = rep_speed_secs(track_windows[bottom_idx:], fps, end_p=0.95)
+            rep_secs = rep_speed_secs(
+                track_windows[bottom_idx:], fps, end_p=0.95)
+        elif exercise == "deadlift":
+            rep_secs = rep_speed_secs(
+                track_windows[:bottom_idx], fps, start_p=0.01, end_p=0.95)
         else:
-            rep_secs = rep_speed_secs(track_windows[:bottom_idx], fps, start_p=0.01, end_p=0.99)
+            assert False, "Unknown Exercise!"
         text = "Rep {}\n{:.2f}s".format(rep_idx, rep_secs)
         super(RepStats, self).__init__(text=text, **kwargs)
 
@@ -438,7 +442,7 @@ class SquatterApp(App):
 
         reps = extract_reps(self._cap._exercise, track_windows)
         print ("TrackingInfo:", track_first_frame,
-                "Reps (", self._cap._exercise, "):", len(reps))
+                "Reps (", self._cap._exercise, "):", reps)
 
         for rep_idx, rep in enumerate(reps):
             l = GridLayout(cols=1, size_hint_y=None, height=dp(260))
@@ -479,18 +483,18 @@ class SquatterApp(App):
         def _track_it(dt):
             f = self._cap.track_next()
             if f is None or self._play_pause_btn.text != "Stop":
-                self._frame_slider.disabled = False
-                self._btn_layout.disabled = False
-                self._process_btn.disabled = True
-                self._process_tracking_info()
-                self.change_play_pause("Play")
-
                 d = {
                     "exercise": exercise,
                     "first_frame": self._cap._track_first_frame,
                     "track_windows": self._cap._track_windows}
                 with open(self._squatter_file, "w") as f:
                     f.write(json.dumps(d, indent=4))
+
+                self._frame_slider.disabled = False
+                self._btn_layout.disabled = False
+                self._process_btn.disabled = True
+                self._process_tracking_info()
+                self.change_play_pause("Play")
                 return
             self._frame_slider.value += 1
             Clock.schedule_once(_track_it)

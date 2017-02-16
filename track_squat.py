@@ -5,9 +5,9 @@ def _cm(track_window):
 def _sq_distance(cm1, cm2):
     return (cm1[0]-cm2[0])**2 + (cm1[1]-cm2[1])**2
 
-def extract_squat_reps(track_windows):
+def extract_squat_reps(track_windows,coeff=2.0):
     reps = []
-    min_squat_distance = 2.0*track_windows[0][3]
+    min_squat_distance = coeff*track_windows[0][3]
     min_back_range = 0.5*track_windows[0][3]
     cms = [_cm(w) for w in track_windows]
 
@@ -26,7 +26,7 @@ def extract_squat_reps(track_windows):
                 max_cm = cur_cm
                 max_idx = idx
 
-            if cur_cm[1] <= min_cm[1]:
+            if (max_cm[1] <= min_cm[1] + min_squat_distance) and (cur_cm[1] <= min_cm[1]):
                 min_cm = cur_cm
                 min_idx = idx
 
@@ -34,7 +34,6 @@ def extract_squat_reps(track_windows):
                 (cur_cm[1] < min_cm[1] + min_back_range)):
                 # We have found bottom of the Squat, which is at max_cm.
                 # Now time to find finishing frame.
-
                 end_dst = _sq_distance(cur_cm, min_cm)
                 end_idx = idx
                 idx += 1
@@ -55,7 +54,7 @@ def extract_squat_reps(track_windows):
 
 def extract_deadlift_reps(track_windows):
     track_windows_reverse = [(w[0], -w[1], w[2], w[3]) for w in track_windows]
-    reps = extract_squat_reps(track_windows_reverse)
+    reps = extract_squat_reps(track_windows_reverse, coeff=1.25)
     return reps
 
 def extract_reps(exercise, track_windows):

@@ -25,9 +25,9 @@ from track_squat import extract_squat_reps, _cm, _sq_distance
 _SQUATTER_EXT=".squatter"
 
 class LoadDialog(FloatLayout):
-    cwd = os.getcwd
     load = ObjectProperty(None)
     cancel = ObjectProperty(None)
+    cwd = ObjectProperty(None)
 
 class FrameCapture(object):
 
@@ -320,6 +320,7 @@ class SquatterApp(App):
         self._process_btn = process_btn
         self._cap = None
         self._rep_layout = rep_layout_inner
+        self._squatter_file = None
 
         _keyboard = None
         def _keyboard_closed():
@@ -372,7 +373,12 @@ class SquatterApp(App):
         self._popup.dismiss()
 
     def _load_video(self, instance):
-        content = LoadDialog(load=self._load_video_file, cancel=self._dismiss_popup)
+        if self._squatter_file is None:
+            cwd = os.getcwd()
+        else:
+            cwd = os.path.dirname(self._squatter_file)
+        content = LoadDialog(
+            load=self._load_video_file, cancel=self._dismiss_popup, cwd=cwd)
         self._popup = Popup(title="Select video", content=content, size_hint=(0.9, 0.9))
         self._popup.open()
 

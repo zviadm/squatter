@@ -9,22 +9,19 @@ def extract_squat_reps(track_windows):
     reps = []
     min_squat_distance = 2.0*track_windows[0][3]
     min_back_range = 0.5*track_windows[0][3]
+    cms = [_cm(w) for w in track_windows]
 
     idx = 0
-    while idx < len(track_windows):
-        while (idx+1 < len(track_windows) and
-                _cm(track_windows[idx])[1] >= _cm(track_windows[idx+1])[1]):
-            idx += 1
-
-        min_cm = _cm(track_windows[idx])
+    while idx < len(cms):
+        min_cm = cms[idx]
         min_idx = idx
-        max_cm = _cm(track_windows[idx])
+        max_cm = cms[idx]
         max_idx = idx
         while True:
-            if idx >= len(track_windows):
+            if idx >= len(cms):
                 # No REP. But ran out of tracking frames.
                 break
-            cur_cm = _cm(track_windows[idx])
+            cur_cm = cms[idx]
             if cur_cm[1] >= max_cm[1]:
                 max_cm = cur_cm
                 max_idx = idx
@@ -41,8 +38,8 @@ def extract_squat_reps(track_windows):
                 end_dst = _sq_distance(cur_cm, min_cm)
                 end_idx = idx
                 idx += 1
-                while idx < len(track_windows):
-                    cur_cm = _cm(track_windows[idx])
+                while idx < len(cms):
+                    cur_cm = cms[idx]
                     if cur_cm[1] > min_cm[1] + 2*min_back_range:
                         break
                     cur_dst = _sq_distance(cur_cm, min_cm)
@@ -67,3 +64,18 @@ def extract_reps(exercise, track_windows):
         "deadlift": extract_deadlift_reps,
     }
     return _f[exercise](track_windows)
+
+def rep_speed_secs(track_windows, fps, start_p=0.0, end_p=1.0):
+    if not track_windows: return 0
+    assert start_p < end_p
+
+    cms = [_cm(w) for w in track_windows]
+    start_dist = _sq_distance(cms[-1], cms[0]) * start_p
+    end_dist = _sq_distance(cms[-1], cms[0]) * end_p
+    start_idx = 0
+    for idx, cm in enumerate(cms):
+        if _sq_distance(cms[0], cm) <= start_dist:
+            start_idx = idx
+        if _sq_distance(cms[0], cm) >= end_dist:
+            return (float(idx-start_idx) / fps)
+    assert False, "Unreachable Code!"

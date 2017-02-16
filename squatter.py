@@ -21,7 +21,7 @@ from kivy.uix.slider import Slider
 from kivy.uix.relativelayout import RelativeLayout
 
 from pymediainfo_ import MediaInfo
-from track_squat import extract_reps, _sq_distance, _cm
+from track_squat import extract_reps, rep_speed_secs, _sq_distance, _cm
 
 _SQUATTER_EXT=".squatter"
 
@@ -290,6 +290,16 @@ class RepCanvas(RelativeLayout):
         self._app.change_frame_to(self._start_frame)
         return True
 
+class RepStats(Label):
+
+    def __init__(self, rep_idx, exercise, fps, track_windows, bottom_idx, **kwargs):
+        if exercise == "squat":
+            rep_secs = rep_speed_secs(track_windows[bottom_idx:], fps, end_p=0.95)
+        else:
+            rep_secs = rep_speed_secs(track_windows[:bottom_idx], fps, start_p=0.01, end_p=0.99)
+        text = "Rep {}\n{:.2f}s".format(rep_idx, rep_secs)
+        super(RepStats, self).__init__(text=text, **kwargs)
+
 
 class SquatterApp(App):
 
@@ -431,14 +441,19 @@ class SquatterApp(App):
                 "Reps (", self._cap._exercise, "):", len(reps))
 
         for rep_idx, rep in enumerate(reps):
-            l = GridLayout(cols=1, size_hint_y=None, height=dp(230))
+            l = GridLayout(cols=1, size_hint_y=None, height=dp(260))
+            rep_windows = track_windows[rep[0]:rep[2]]
+            bottom_idx = rep[1]-rep[0]
             l.add_widget(
-                    Label(text="Rep {}".format(rep_idx+1), size_hint_y=None, height=dp(30)))
+                RepStats(
+                    rep_idx+1, self._cap._exercise, self._cap.fps(),
+                    rep_windows, bottom_idx,
+                    halign="center", size_hint_y=None, height=dp(60)))
             l.add_widget(
-                    RepCanvas(
-                        self, self._cap._exercise, track_windows[rep[0]:rep[2]],
-                        rep[1]-rep[0], rep[0] + track_first_frame,
-                        size_hint_y=None, height=dp(200)))
+                RepCanvas(
+                    self, self._cap._exercise,
+                    rep_windows, bottom_idx, rep[0] + track_first_frame,
+                    size_hint_y=None, height=dp(200)))
             self._rep_layout.add_widget(l)
 
     def _process_video(self, instance):

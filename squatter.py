@@ -3,7 +3,6 @@ import os
 
 
 import cv2
-import pymediainfo
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -32,15 +31,17 @@ class LoadDialog(FloatLayout):
 class FrameCapture(object):
 
     def __init__(self, filename, frame_canvas, track_first_frame=None, track_windows=None):
-        media_info = pymediainfo.MediaInfo.parse(filename)
         self._rotate = 0
-        for track in media_info.tracks:
-            if track.track_type.lower() != "video": continue
-            rot_degree = int(float(track.to_data().get("rotation", 0)))
-            while rot_degree >= 90:
-                rot_degree -= 90
-                self._rotate += 1
-            break
+        # TODO(zviad): figure out how to make this work with PyInstaller.
+        #import pymediainfo
+        #media_info = pymediainfo.MediaInfo.parse(filename)
+        #for track in media_info.tracks:
+        #    if track.track_type.lower() != "video": continue
+        #    rot_degree = int(float(track.to_data().get("rotation", 0)))
+        #    while rot_degree >= 90:
+        #        rot_degree -= 90
+        #        self._rotate += 1
+        #    break
         self._cap = cv2.VideoCapture(filename)
         self._frame_canvas = frame_canvas
         self._track_first_frame = track_first_frame
@@ -109,9 +110,6 @@ class FrameCapture(object):
             canvas_track_window[3])
         return canvas_track_window
 
-    def frame_xy_to_canvas_xy(x, y):
-        pass
-
     def canvas_xy_to_frame_xy(self, x, y):
         frame_x = x - self._frame_pos[0]
         if frame_x < 0 or frame_x >= self._frame_size[0]:
@@ -160,7 +158,6 @@ class FrameCanvas(RelativeLayout):
         self._app = app
         self.bind(width=app.seek_video)
         self.bind(height=app.seek_video)
-        #self.bind(mouse_pos=self._on_hover)
         self.touch_points = []
 
         self._select_event = None
@@ -262,7 +259,7 @@ class SquatRepCanvas(RelativeLayout):
 
         _line_width = 5
         with self.canvas:
-            Color(0, 0, 1)
+            Color(1, 1, 1)
             Line(points=(
                 _convert_xy(self._cms[0]) +
                 _convert_xy(self._cms[self._bottom_idx])), width=_line_width)
@@ -437,12 +434,12 @@ class SquatterApp(App):
                 self._process_tracking_info()
                 self.change_play_pause("Play")
 
-                # TODO(zviad): Store tracking points as JSON.
                 d = {
+                    "exercise": "squat",
                     "first_frame": self._cap._track_first_frame,
                     "track_windows": self._cap._track_windows}
                 with open(self._squatter_file, "w") as f:
-                    f.write(json.dumps(d))
+                    f.write(json.dumps(d, indent=4))
                 return
             self._frame_slider.value += 1
             Clock.schedule_once(_track_it, interval_secs)
@@ -470,7 +467,7 @@ class SquatterApp(App):
         if track_window is not None:
             self._frame_canvas.canvas.add(Color(1, 0, 0))
             self._frame_canvas.canvas.add(
-                    Rectangle(pos=track_window[:2], size=track_window[2:]))
+                    Line(rectangle=track_window[:2] + track_window[2:], width=5))
         self._frame_canvas.canvas.ask_update()
 
 Factory.register('LoadDialog', cls=LoadDialog)

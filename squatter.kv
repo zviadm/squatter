@@ -5,11 +5,11 @@
         orientation: "vertical"
         FileChooserListView:
             id: filechooser
-            path: root.cwd
+            path: root.cwd()
 
         BoxLayout:
             size_hint_y: None
-            height: 100
+            height: dp(40)
             Button:
                 text: "Load"
                 on_release: root.load(filechooser.path, filechooser.selection)

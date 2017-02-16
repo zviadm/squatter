@@ -9,6 +9,7 @@ from kivy.core.window import Window
 from kivy.factory import Factory
 from kivy.graphics.texture import Texture
 from kivy.graphics import Color, Rectangle, Line, InstructionGroup
+from kivy.metrics import dp
 from kivy.uix.button import Button
 from kivy.uix.gridlayout import GridLayout
 from kivy.uix.floatlayout import FloatLayout
@@ -24,7 +25,7 @@ from track_squat import extract_squat_reps, _cm, _sq_distance
 _SQUATTER_EXT=".squatter"
 
 class LoadDialog(FloatLayout):
-    cwd = os.getcwd()
+    cwd = os.getcwd
     load = ObjectProperty(None)
     cancel = ObjectProperty(None)
 
@@ -200,7 +201,7 @@ class FrameCanvas(RelativeLayout):
         self._select_circle = InstructionGroup()
         self._select_circle.add(Color(1, 0, 0))
         self._select_circle.add(
-                Line(circle=(self._select_center_xy) + (self._select_radius, ), width=5))
+                Line(circle=(self._select_center_xy) + (self._select_radius, ), width=dp(3)))
         self.canvas.add(self._select_circle)
 
     def on_touch_up(self, touch):
@@ -257,7 +258,7 @@ class SquatRepCanvas(RelativeLayout):
                     (xy[0] - self._min_x) * scale + x_adj,
                     self.height - ((xy[1] - self._min_y) * scale + y_adj))
 
-        _line_width = 5
+        _line_width = dp(3)
         with self.canvas:
             Color(1, 1, 1)
             Line(points=(
@@ -281,7 +282,7 @@ class SquatRepCanvas(RelativeLayout):
 class SquatterApp(App):
 
     def build(self):
-        play_pause_btn = Button(text='Play', size_hint_x=None, width=200)
+        play_pause_btn = Button(text='Play', size_hint_x=None, width=dp(60))
         play_pause_btn.bind(on_press=self._on_play_pause)
         self._play_pause_btn = play_pause_btn
 
@@ -293,10 +294,10 @@ class SquatterApp(App):
         process_btn = Button(text='Process', disabled=True)
         process_btn.bind(on_press=self._process_video)
 
-        btn_layout = GridLayout(cols=2, size_hint_y=None, height=100)
+        btn_layout = GridLayout(cols=2, size_hint_y=None, height=dp(40))
         btn_layout.add_widget(load_btn)
         btn_layout.add_widget(process_btn)
-        slider_layout = GridLayout(cols=2, size_hint_y=None, height=100)
+        slider_layout = GridLayout(cols=2, size_hint_y=None, height=dp(40))
         slider_layout.add_widget(play_pause_btn)
         slider_layout.add_widget(frame_slider)
         video_layout = GridLayout(cols=1)
@@ -306,7 +307,7 @@ class SquatterApp(App):
 
         rep_layout_inner = GridLayout(cols=3, size_hint_y=None)
         rep_layout_inner.bind(minimum_height=rep_layout_inner.setter('height'))
-        rep_layout = ScrollView(size_hint_x=None, width=400)
+        rep_layout = ScrollView(size_hint_x=None, width=dp(200))
         rep_layout.add_widget(rep_layout_inner)
 
         main_layout = GridLayout(cols=2)
@@ -336,10 +337,12 @@ class SquatterApp(App):
             if self._cap is None: return
             self.change_play_pause("Pause")
             def _play(*args, **kwargs):
-                if (self._play_pause_btn.text == "Pause" and
-                        self._frame_slider.value < self._frame_slider.max):
-                    self._frame_slider.value += 1
-                    Clock.schedule_once(_play, 0.5/self._cap.fps())
+                if self._play_pause_btn.text == "Pause":
+                    if self._frame_slider.value >= self._frame_slider.max:
+                        self.change_play_pause("Play")
+                    else:
+                        self._frame_slider.value += 1
+                        Clock.schedule_once(_play, 0.5/self._cap.fps())
             Clock.schedule_once(_play, 0.5/self._cap.fps())
         elif self._play_pause_btn.text == "Pause":
             self.change_play_pause("Play")
@@ -403,14 +406,14 @@ class SquatterApp(App):
         print ("TrackingInfo:", track_first_frame, "Reps:", len(squat_reps))
 
         for rep_idx, squat_rep in enumerate(squat_reps):
-            l = GridLayout(cols=1, size_hint_y=None, height=450)
+            l = GridLayout(cols=1, size_hint_y=None, height=dp(230))
             l.add_widget(
-                    Label(text="Rep {}".format(rep_idx+1), size_hint_y=None, height=50))
+                    Label(text="Rep {}".format(rep_idx+1), size_hint_y=None, height=dp(30)))
             l.add_widget(
                     SquatRepCanvas(
                         self, track_windows[squat_rep[0]:squat_rep[2]],
                         squat_rep[1]-squat_rep[0], squat_rep[0] + track_first_frame,
-                        size_hint_y=None, height=400))
+                        size_hint_y=None, height=dp(200)))
             self._rep_layout.add_widget(l)
 
     def _process_video(self, instance):
@@ -467,7 +470,7 @@ class SquatterApp(App):
         if track_window is not None:
             self._frame_canvas.canvas.add(Color(1, 0, 0))
             self._frame_canvas.canvas.add(
-                    Line(rectangle=track_window[:2] + track_window[2:], width=5))
+                    Line(rectangle=track_window[:2] + track_window[2:], width=dp(3)))
         self._frame_canvas.canvas.ask_update()
 
 Factory.register('LoadDialog', cls=LoadDialog)

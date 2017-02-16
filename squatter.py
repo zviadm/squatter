@@ -1,6 +1,6 @@
 import json
 import os
-
+import sys
 
 import cv2
 from kivy.app import App
@@ -20,6 +20,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
 from kivy.uix.relativelayout import RelativeLayout
 
+from pymediainfo_ import MediaInfo
 from track_squat import extract_reps, _sq_distance, _cm
 
 _SQUATTER_EXT=".squatter"
@@ -37,8 +38,7 @@ class FrameCapture(object):
     def __init__(self, filename, frame_canvas, track_first_frame=None, track_windows=None):
         self._rotate = 0
         # TODO(zviad): figure out how to make this work with PyInstaller.
-        import pymediainfo
-        media_info = pymediainfo.MediaInfo.parse(filename)
+        media_info = MediaInfo.parse(filename)
         for track in media_info.tracks:
             if track.track_type.lower() != "video": continue
             rot_degree = int(float(track.to_data().get("rotation", 0)))
@@ -142,7 +142,6 @@ class FrameCapture(object):
 
     def track_next(self):
         """Should be called until returns False"""
-        print ("FRAME N", self._cap.get(cv2.CAP_PROP_POS_FRAMES), self._track_windows[-1])
         frame = self._read_frame()
         if frame is None: return None
         ok, track_window = self._tracker.update(frame)
@@ -150,7 +149,6 @@ class FrameCapture(object):
             print("Tracker no longer available!", track_window)
             return None
         self._track_windows.append(track_window)
-        print ("Track window", track_window)
         return frame
 
 
@@ -265,6 +263,7 @@ class RepCanvas(RelativeLayout):
                     self.height - ((xy[1] - self._min_y) * scale + y_adj))
 
         _line_width = dp(3)
+        self.canvas.clear()
         with self.canvas:
             Color(1, 1, 1)
             Line(points=(
@@ -334,6 +333,7 @@ class SquatterApp(App):
         self._cap = None
         self._rep_layout = rep_layout_inner
         self._squatter_file = None
+        self._popup = None
 
         _keyboard = None
         def _keyboard_closed():
@@ -356,8 +356,8 @@ class SquatterApp(App):
                         self.change_play_pause("Play")
                     else:
                         self._frame_slider.value += 1
-                        Clock.schedule_once(_play, 0.5/self._cap.fps())
-            Clock.schedule_once(_play, 0.5/self._cap.fps())
+                        Clock.schedule_once(_play)
+            Clock.schedule_once(_play)
         elif self._play_pause_btn.text == "Pause":
             self.change_play_pause("Play")
         elif self._play_pause_btn.text == "Stop":
@@ -383,7 +383,8 @@ class SquatterApp(App):
         return True
 
     def _dismiss_popup(self):
-        self._popup.dismiss()
+        if self._popup is not None:
+            self._popup.dismiss()
 
     def _load_video(self, instance):
         if self._squatter_file is None:
@@ -395,13 +396,13 @@ class SquatterApp(App):
         self._popup = Popup(title="Select Video", content=content, size_hint=(0.9, 0.9))
         self._popup.open()
 
-    def _load_video_file(self, path, filename):
+    def _load_video_file(self, path, filenames):
         if self._cap:
             self._cap.release()
         exercise = None
         track_first_frame = None
         track_windows = None
-        filepath = os.path.join(path, filename[0])
+        filepath = os.path.join(path, filenames[0])
         self._squatter_file = filepath+_SQUATTER_EXT
         if os.path.exists(self._squatter_file):
             with open(self._squatter_file, "r") as f:
@@ -455,11 +456,11 @@ class SquatterApp(App):
         self._frame_slider.disabled = True
         self._btn_layout.disabled = True
         self.change_play_pause("Stop")
+        self._cap._exercise = exercise
         self._cap.track_start(
                 points[0][0], points[0][1],
                 points[1][0]-points[0][0], points[1][1]-points[0][1],
                 int(self._frame_slider.value))
-        interval_secs = 0.1/self._cap.fps() # Try as fast as possible.
         def _track_it(dt):
             f = self._cap.track_next()
             if f is None or self._play_pause_btn.text != "Stop":
@@ -477,8 +478,8 @@ class SquatterApp(App):
                     f.write(json.dumps(d, indent=4))
                 return
             self._frame_slider.value += 1
-            Clock.schedule_once(_track_it, interval_secs)
-        Clock.schedule_once(_track_it, interval_secs)
+            Clock.schedule_once(_track_it)
+        Clock.schedule_once(_track_it)
 
     def change_frame_to(self, frame_n):
         self._frame_slider.value = frame_n
@@ -486,6 +487,8 @@ class SquatterApp(App):
     def seek_video(self, _i, _v):
         if not self._cap: return
         self._frame_canvas.clear_selection()
+        if self._frame_canvas.width == 0 or self._frame_canvas.height == 0:
+            return
         frame_pos, frame = self._cap.frame_for_canvas(int(self._frame_slider.value))
         if frame is None:
             print ("WARNING: Failed to fetch a frame properly!", int(self._frame_slider.value))
@@ -508,9 +511,16 @@ class SquatterApp(App):
                     Line(rectangle=track_window[:2] + track_window[2:], width=dp(3)))
         self._frame_canvas.canvas.ask_update()
 
+    def on_start(self):
+        if len(sys.argv) > 1:
+            fname = os.path.realpath(sys.argv[1])
+            print ("Loading file", fname)
+            s._load_video_file(os.path.dirname(fname), [os.path.basename(fname)])
+
 Factory.register('LoadDialog', cls=LoadDialog)
 Factory.register('ExerciseDialog', cls=ExerciseDialog)
 
 if __name__ == '__main__':
-    SquatterApp().run()
+    s = SquatterApp()
+    s.run()
 

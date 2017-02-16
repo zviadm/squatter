@@ -16,8 +16,8 @@ def extract_squat_reps(track_windows):
                 _cm(track_windows[idx])[1] >= _cm(track_windows[idx+1])[1]):
             idx += 1
 
-        start_cm = _cm(track_windows[idx])
-        start_idx = idx
+        min_cm = _cm(track_windows[idx])
+        min_idx = idx
         max_cm = _cm(track_windows[idx])
         max_idx = idx
         while True:
@@ -29,23 +29,28 @@ def extract_squat_reps(track_windows):
                 max_cm = cur_cm
                 max_idx = idx
 
-            if ((max_cm[1] > start_cm[1] + min_squat_distance) and
-                (cur_cm[1] < start_cm[1] + min_back_range)):
-                # We have found bottom of the Squat, which is at w_max_cm.
+            if cur_cm[1] <= min_cm[1]:
+                min_cm = cur_cm
+                min_idx = idx
+
+            if ((max_cm[1] > min_cm[1] + min_squat_distance) and
+                (cur_cm[1] < min_cm[1] + min_back_range)):
+                # We have found bottom of the Squat, which is at max_cm.
                 # Now time to find finishing frame.
-                end_dst = _sq_distance(cur_cm, start_cm)
+
+                end_dst = _sq_distance(cur_cm, min_cm)
                 end_idx = idx
                 idx += 1
                 while idx < len(track_windows):
                     cur_cm = _cm(track_windows[idx])
-                    if cur_cm[1] > start_cm[1] + 2*min_back_range:
+                    if cur_cm[1] > min_cm[1] + 2*min_back_range:
                         break
-                    cur_dst = _sq_distance(cur_cm, start_cm)
+                    cur_dst = _sq_distance(cur_cm, min_cm)
                     if cur_dst <= end_dst:
                         end_dst = cur_dst
                         end_idx = idx
                     idx += 1
-                reps.append([start_idx, max_idx, end_idx])
+                reps.append([min_idx, max_idx, end_idx])
                 idx = end_idx
                 break
             idx += 1

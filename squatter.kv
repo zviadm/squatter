@@ -16,3 +16,15 @@
             Button:
                 text: "Cancel"
                 on_release: root.cancel()
+
+<ExerciseDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        Button:
+            text: "Squat"
+            on_release: root.process(exercise="squat")
+        Button:
+            text: "Deadlift"
+            on_release: root.process(exercise="deadlift")

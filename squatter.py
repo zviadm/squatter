@@ -20,7 +20,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.uix.slider import Slider
 from kivy.uix.relativelayout import RelativeLayout
 
-from track_squat import extract_squat_reps, _cm, _sq_distance
+from track_squat import extract_reps, _sq_distance, _cm
 
 _SQUATTER_EXT=".squatter"
 
@@ -29,20 +29,23 @@ class LoadDialog(FloatLayout):
     cancel = ObjectProperty(None)
     cwd = ObjectProperty(None)
 
+class ExerciseDialog(FloatLayout):
+    process = ObjectProperty(None)
+
 class FrameCapture(object):
 
     def __init__(self, filename, frame_canvas, track_first_frame=None, track_windows=None):
         self._rotate = 0
         # TODO(zviad): figure out how to make this work with PyInstaller.
-        #import pymediainfo
-        #media_info = pymediainfo.MediaInfo.parse(filename)
-        #for track in media_info.tracks:
-        #    if track.track_type.lower() != "video": continue
-        #    rot_degree = int(float(track.to_data().get("rotation", 0)))
-        #    while rot_degree >= 90:
-        #        rot_degree -= 90
-        #        self._rotate += 1
-        #    break
+        import pymediainfo
+        media_info = pymediainfo.MediaInfo.parse(filename)
+        for track in media_info.tracks:
+            if track.track_type.lower() != "video": continue
+            rot_degree = int(float(track.to_data().get("rotation", 0)))
+            while rot_degree >= 90:
+                rot_degree -= 90
+                self._rotate += 1
+            break
         self._cap = cv2.VideoCapture(filename)
         self._frame_canvas = frame_canvas
         self._track_first_frame = track_first_frame
@@ -71,7 +74,8 @@ class FrameCapture(object):
         self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_n)
         self._cap.set(cv2.CAP_PROP_CONVERT_RGB, True)
         frame = self._read_frame()
-        assert frame is not None, "Frame number out of Bounds!"
+        if frame is None: return None, None
+
         canvas_w, canvas_h = int(self._frame_canvas.width), int(self._frame_canvas.height)
         frame_w, frame_h = len(frame[0]), len(frame)
         self._frame_orig_size = (frame_w, frame_h)
@@ -231,12 +235,14 @@ class FrameCanvas(RelativeLayout):
                 self._select_center_xy[1] - self._select_radius)
         return (frame_xy1, frame_xy2)
 
-class SquatRepCanvas(RelativeLayout):
+class RepCanvas(RelativeLayout):
 
-    def __init__(self, app, track_windows, bottom_idx, start_frame, **kwargs):
-        super(SquatRepCanvas, self).__init__(**kwargs)
+    def __init__(self, app,  exercise, track_windows, bottom_idx, start_frame,**kwargs):
+        super(RepCanvas, self).__init__(**kwargs)
+        assert exercise in ["squat", "deadlift"]
         self._app = app
         self._start_frame = start_frame
+        self._exercise = exercise
 
         self._cms = [_cm(w) for w in track_windows]
         self._min_x = min(cm[0] for cm in self._cms)
@@ -264,14 +270,21 @@ class SquatRepCanvas(RelativeLayout):
             Line(points=(
                 _convert_xy(self._cms[0]) +
                 _convert_xy(self._cms[self._bottom_idx])), width=_line_width)
-            Color(1, 0, 0)
-            Line(points=[p
-                for cm in self._cms[:self._bottom_idx]
-                for p in _convert_xy(cm)], width=_line_width)
-            Color(0, 1, 0)
-            Line(points=[p
-                for cm in self._cms[self._bottom_idx:]
-                for p in _convert_xy(cm) ], width=_line_width)
+            if self._exercise == "squat":
+                Color(1, 0, 0)
+                Line(points=[p
+                    for cm in self._cms[:self._bottom_idx]
+                    for p in _convert_xy(cm)], width=_line_width)
+                Color(0, 1, 0)
+                Line(points=[p
+                    for cm in self._cms[self._bottom_idx:]
+                    for p in _convert_xy(cm) ], width=_line_width)
+            elif self._exercise == "deadlift":
+                Color(0, 1, 0)
+                Line(points=[p
+                    for cm in self._cms[:self._bottom_idx]
+                    for p in _convert_xy(cm)], width=_line_width)
+                # Don't care about bar path going down during deadlifts.
 
     def on_touch_down(self, touch):
         if not self.collide_point(*touch.pos): return False
@@ -283,16 +296,16 @@ class SquatterApp(App):
 
     def build(self):
         play_pause_btn = Button(text='Play', size_hint_x=None, width=dp(60))
-        play_pause_btn.bind(on_press=self._on_play_pause)
+        play_pause_btn.bind(on_release=self._on_play_pause)
         self._play_pause_btn = play_pause_btn
 
         frame_canvas = FrameCanvas(self)
         frame_slider = Slider(min=0, max=0, value=0)
         frame_slider.bind(value=self.seek_video)
         load_btn = Button(text='Load')
-        load_btn.bind(on_press=self._load_video)
+        load_btn.bind(on_release=self._load_video)
         process_btn = Button(text='Process', disabled=True)
-        process_btn.bind(on_press=self._process_video)
+        process_btn.bind(on_release=self._process_video)
 
         btn_layout = GridLayout(cols=2, size_hint_y=None, height=dp(40))
         btn_layout.add_widget(load_btn)
@@ -339,7 +352,7 @@ class SquatterApp(App):
             self.change_play_pause("Pause")
             def _play(*args, **kwargs):
                 if self._play_pause_btn.text == "Pause":
-                    if self._frame_slider.value >= self._frame_slider.max:
+                    if self._frame_slider.value+1 >= self._frame_slider.max:
                         self.change_play_pause("Play")
                     else:
                         self._frame_slider.value += 1
@@ -379,12 +392,13 @@ class SquatterApp(App):
             cwd = os.path.dirname(self._squatter_file)
         content = LoadDialog(
             load=self._load_video_file, cancel=self._dismiss_popup, cwd=cwd)
-        self._popup = Popup(title="Select video", content=content, size_hint=(0.9, 0.9))
+        self._popup = Popup(title="Select Video", content=content, size_hint=(0.9, 0.9))
         self._popup.open()
 
     def _load_video_file(self, path, filename):
         if self._cap:
             self._cap.release()
+        exercise = None
         track_first_frame = None
         track_windows = None
         filepath = os.path.join(path, filename[0])
@@ -392,11 +406,13 @@ class SquatterApp(App):
         if os.path.exists(self._squatter_file):
             with open(self._squatter_file, "r") as f:
                 tracking_data = json.loads(f.read())
+                exercise = tracking_data["exercise"]
                 track_first_frame = tracking_data["first_frame"]
                 track_windows = tracking_data["track_windows"]
         self._cap = FrameCapture(
             filepath, self._frame_canvas,
             track_first_frame=track_first_frame, track_windows=track_windows)
+        self._cap._exercise = exercise
         self._process_tracking_info()
 
         self.change_frame_to(track_first_frame or 0)
@@ -408,21 +424,31 @@ class SquatterApp(App):
         self._rep_layout.clear_widgets()
         track_first_frame, track_windows = self._cap._track_first_frame, self._cap._track_windows
         if track_first_frame is None: return
-        squat_reps = extract_squat_reps(track_windows)
-        print ("TrackingInfo:", track_first_frame, "Reps:", len(squat_reps))
 
-        for rep_idx, squat_rep in enumerate(squat_reps):
+        reps = extract_reps(self._cap._exercise, track_windows)
+        print ("TrackingInfo:", track_first_frame,
+                "Reps (", self._cap._exercise, "):", len(reps))
+
+        for rep_idx, rep in enumerate(reps):
             l = GridLayout(cols=1, size_hint_y=None, height=dp(230))
             l.add_widget(
                     Label(text="Rep {}".format(rep_idx+1), size_hint_y=None, height=dp(30)))
             l.add_widget(
-                    SquatRepCanvas(
-                        self, track_windows[squat_rep[0]:squat_rep[2]],
-                        squat_rep[1]-squat_rep[0], squat_rep[0] + track_first_frame,
+                    RepCanvas(
+                        self, self._cap._exercise, track_windows[rep[0]:rep[2]],
+                        rep[1]-rep[0], rep[0] + track_first_frame,
                         size_hint_y=None, height=dp(200)))
             self._rep_layout.add_widget(l)
 
     def _process_video(self, instance):
+        content = ExerciseDialog(process=self._process_exercise)
+        self._popup = Popup(
+                title="Select Exercise", content=content,
+                size_hint=(None, None), size=(dp(200), dp(200)))
+        self._popup.open()
+
+    def _process_exercise(self, exercise):
+        self._dismiss_popup()
         points = self._frame_canvas.get_selection()
         assert points is not None
 
@@ -444,7 +470,7 @@ class SquatterApp(App):
                 self.change_play_pause("Play")
 
                 d = {
-                    "exercise": "squat",
+                    "exercise": exercise,
                     "first_frame": self._cap._track_first_frame,
                     "track_windows": self._cap._track_windows}
                 with open(self._squatter_file, "w") as f:
@@ -461,6 +487,9 @@ class SquatterApp(App):
         if not self._cap: return
         self._frame_canvas.clear_selection()
         frame_pos, frame = self._cap.frame_for_canvas(int(self._frame_slider.value))
+        if frame is None:
+            print ("WARNING: Failed to fetch a frame properly!", int(self._frame_slider.value))
+            return
         # Frame needs to flipped because Kivy coordinates are bottom up.
         frame = cv2.flip(frame, 0)
         frame_size = (len(frame[0]), len(frame))
@@ -480,6 +509,7 @@ class SquatterApp(App):
         self._frame_canvas.canvas.ask_update()
 
 Factory.register('LoadDialog', cls=LoadDialog)
+Factory.register('ExerciseDialog', cls=ExerciseDialog)
 
 if __name__ == '__main__':
     SquatterApp().run()

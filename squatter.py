@@ -3,7 +3,7 @@ import os
 
 
 import cv2
-from pymediainfo import MediaInfo
+import pymediainfo
 from kivy.app import App
 from kivy.clock import Clock
 from kivy.core.window import Window
@@ -32,11 +32,10 @@ class LoadDialog(FloatLayout):
 class FrameCapture(object):
 
     def __init__(self, filename, frame_canvas, track_first_frame=None, track_windows=None):
-        media_info = MediaInfo.parse(filename)
+        media_info = pymediainfo.MediaInfo.parse(filename)
         self._rotate = 0
         for track in media_info.tracks:
             if track.track_type.lower() != "video": continue
-            # TODO(zviad): handle 180/270 degree rotations too.
             rot_degree = int(float(track.to_data().get("rotation", 0)))
             while rot_degree >= 90:
                 rot_degree -= 90

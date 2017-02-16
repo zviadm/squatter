@@ -1,5 +1,6 @@
 # -*- mode: python -*-
 
+from kivy.tools.packaging.pyinstaller_hooks import get_deps_all, hookspath, runtime_hooks
 block_cipher = None
 
 

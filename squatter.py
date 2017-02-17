@@ -251,6 +251,7 @@ class RepCanvas(RelativeLayout):
         self._start_frame = start_frame
         self.bind(width=self._redraw)
         self.bind(height=self._redraw)
+        self._redraw()
 
     def _redraw(self, *args, **kwargs):
         scale = (self.height * 0.9) / (self._max_y - self._min_y)

@@ -24,6 +24,12 @@ For each rep you should see:
 * Green line showing ascent
 * Rep speed in seconds (Only includes ascending part)
 
+Screenshot of analysis of an expert Squat:
+![expert squat](res/squat1.png)
+
+Screenshot of analysis of a novice Squat:
+![novice squat](res/squat2.png)
+
 
 How to build
 ------------

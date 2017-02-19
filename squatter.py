@@ -296,7 +296,7 @@ class RepStats(Label):
     def __init__(self, rep_idx, exercise, fps, track_windows, bottom_idx, **kwargs):
         if exercise == "squat":
             rep_secs = rep_speed_secs(
-                track_windows[bottom_idx:], fps, end_p=0.95)
+                track_windows[bottom_idx:], fps, end_p=0.90)
         elif exercise == "deadlift":
             rep_secs = rep_speed_secs(
                 track_windows[:bottom_idx], fps, start_p=0.01, end_p=0.95)

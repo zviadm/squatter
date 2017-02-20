@@ -34,6 +34,9 @@ Screenshot of analysis of a novice Squat:
 How to build
 ------------
 
+Built executables for OSx are in `exes/` folder. For all other platforms you will have
+to build manually. 
+
 Squatter has two main dependencies:
 * OpenCV
 * Kivy

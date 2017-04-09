@@ -21,7 +21,7 @@ from kivy.uix.slider import Slider
 from kivy.uix.relativelayout import RelativeLayout
 
 from pymediainfo_ import MediaInfo
-from track_squat import extract_reps, rep_speed_secs, _sq_distance, _cm
+from track_squat import extract_reps, _sq_distance, _cm
 
 _SQUATTER_EXT=".squatter"
 
@@ -295,11 +295,9 @@ class RepStats(Label):
 
     def __init__(self, rep_idx, exercise, fps, track_windows, bottom_idx, **kwargs):
         if exercise == "squat":
-            rep_secs = rep_speed_secs(
-                track_windows[bottom_idx:], fps, end_p=0.90)
+            rep_secs = float(len(track_windows)-bottom_idx) / fps
         elif exercise == "deadlift":
-            rep_secs = rep_speed_secs(
-                track_windows[:bottom_idx], fps, start_p=0.01, end_p=0.95)
+            rep_secs = float(bottom_idx) / fps
         else:
             assert False, "Unknown Exercise!"
         text = "Rep {}\n{:.2f}s".format(rep_idx, rep_secs)

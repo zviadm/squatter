@@ -5,7 +5,7 @@ def _cm(track_window):
 def _sq_distance(cm1, cm2):
     return (cm1[0]-cm2[0])**2 + (cm1[1]-cm2[1])**2
 
-def extract_squat_reps(track_windows,coeff=2.0):
+def _extract_reps(track_windows,coeff=2.0):
     reps = []
     min_squat_distance = coeff*track_windows[0][3]
     min_back_range = 0.5*track_windows[0][3]
@@ -52,10 +52,23 @@ def extract_squat_reps(track_windows,coeff=2.0):
             idx += 1
     return reps
 
+def extract_squat_reps(track_windows,coeff=2.0):
+    reps = _extract_reps(track_windows,coeff=coeff)
+    squat_reps = []
+    for min_idx, max_idx, end_idx in reps:
+        _, ex = _trunc_rep(track_windows[max_idx:end_idx], end_p=0.90)
+        squat_reps.append([min_idx, max_idx, max_idx+ex])
+    return squat_reps
+
+
 def extract_deadlift_reps(track_windows):
     track_windows_reverse = [(w[0], -w[1], w[2], w[3]) for w in track_windows]
-    reps = extract_squat_reps(track_windows_reverse, coeff=1.25)
-    return reps
+    reps = _extract_reps(track_windows_reverse, coeff=1.25)
+    dead_reps = []
+    for min_idx, max_idx, end_idx in reps:
+        sx, _ = _trunc_rep(track_windows_reverse[min_idx:max_idx], start_p=0.01, end_p=0.95)
+        dead_reps.append([min_idx+sx, max_idx, end_idx])
+    return dead_reps
 
 def extract_reps(exercise, track_windows):
     _f = {
@@ -64,7 +77,7 @@ def extract_reps(exercise, track_windows):
     }
     return _f[exercise](track_windows)
 
-def rep_speed_secs(track_windows, fps, start_p=0.0, end_p=1.0):
+def _trunc_rep(track_windows, start_p=0.0, end_p=1.0):
     if not track_windows: return 0
     assert start_p < end_p
 
@@ -76,5 +89,5 @@ def rep_speed_secs(track_windows, fps, start_p=0.0, end_p=1.0):
         if _sq_distance(cms[0], cm) <= start_dist:
             start_idx = idx
         if _sq_distance(cms[0], cm) >= end_dist:
-            return (float(idx-start_idx) / fps)
+            return start_idx, idx
     assert False, "Unreachable Code!"
